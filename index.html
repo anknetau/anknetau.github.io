@@ -1,4 +1,130 @@
-<html>
-	<head></head>
-	<body>Test</body>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clone Sweeper</title>
+    <style>
+      @font-face {
+        font-family: "Public Pixel";
+        src: url("./publicpixel.woff2") format("woff2");
+        font-weight: normal;
+        font-style: normal;
+      }
+
+      body {
+        display: flex;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+        background-color: #f4f4f4;
+        font-family: "Public Pixel", Arial, Helvetica, sans-serif;
+      }
+
+      #tile-grid {
+        display: grid;
+        grid-template-columns: repeat(13, 80px);
+        grid-template-rows: repeat(10, 80px);
+        border: 2px solid #333;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .tile {
+        width: 80px;
+        height: 80px;
+        background-color: grey; /* Initial color */
+        border: 1px solid #aaa;
+        cursor: pointer;
+        /* transition: background-color 0.2s ease; */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .tile:hover {
+        background-color: #a00;
+      }
+
+      .tile.covered:hover {
+        background-color: #500;
+      }
+
+      .tile.covered {
+        background-color: #333;
+      }
+
+      .tile:not(.empty) > span {
+        font-size: medium;
+        position: absolute;
+        bottom: 8px;
+      }
+
+      .empty > span {
+        font-size: large;
+        position: absolute;
+        color: white !important;
+      }
+
+      .covered > * {
+        display: none;
+      }
+
+      .tile > span:nth-child(3) {
+        display: block;
+        color: red;
+      }
+
+      :not(.covered) > span:nth-child(3) {
+        display: none;
+      }
+
+      .tile.clicked {
+        background-color: red;
+      }
+
+      .tile {
+        position: relative;
+      }
+
+      .item {
+        position: absolute;
+        inset: 0;
+      }
+
+      .tile img:not(.coin) {
+        position: absolute;
+        top: 4px;
+        left: 20%;
+      }
+
+      img.dead {
+        filter: grayscale(100%);
+      }
+
+      .tile img.coin {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+      }
+
+      .tile img.itemOnly {
+        position: absolute;
+        top: 15px; /* Put it more in the middle */
+      }
+    </style>
+    <script src="js/utils.js"></script>
+    <script src="code.js"></script>
+  </head>
+  <body>
+    <div>
+      <div id="tile-grid"></div>
+      <div>
+        <button id="redo-button">Restart!</button>
+        <button id="showall-button">Show all</button>
+      </div>
+      <div id="stats">JORGE POWER</div>
+      <button id="level-up">Level up!</button>
+    </div>
+    <div id="sprites"></div>
+  </body>
 </html>
