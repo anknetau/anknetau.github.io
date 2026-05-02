@@ -21,6 +21,18 @@
         font-family: "Public Pixel", Arial, Helvetica, sans-serif;
       }
 
+      button,
+      input,
+      textarea,
+      select {
+        font-family: inherit;
+      }
+
+      button {
+        margin: 10px;
+        padding: 10px;
+      }
+
       #tile-grid {
         display: grid;
         grid-template-columns: repeat(13, 80px);
@@ -69,9 +81,10 @@
         display: none;
       }
 
-      .tile > span:nth-child(3) {
+      .tile.covered > span {
         display: block;
         color: red;
+        top: 30px;
       }
 
       :not(.covered) > span:nth-child(3) {
@@ -112,6 +125,7 @@
         top: 15px; /* Put it more in the middle */
       }
 
+      /* TODO: move or remove this junk: */
       :where(html) {
         --ease-1: cubic-bezier(0.25, 0, 0.5, 1);
         --ease-2: cubic-bezier(0.25, 0, 0.4, 1);
@@ -539,20 +553,98 @@
           filter: brightness(1);
         }
       }
+
+      #rip {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -60%);
+
+        width: 80%;
+        height: 100%;
+        overflow: hidden;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        user-select: none;
+        z-index: 10000;
+        flex-direction: column;
+      }
+
+      #riptitle {
+        font-size: 250px;
+        color: #ff2100;
+        animation: glitch var(--ease-elastic-in-1) 600ms infinite;
+        margin: 30px;
+      }
+
+      #popup-guess {
+        visibility: hidden;
+        position: fixed;
+        top: 0;
+        left: 0;
+        display: grid;
+        grid-template-columns: repeat(4, 40px);
+        grid-template-rows: repeat(4, 40px);
+        gap: 4px;
+        transform: translate(10px, 10px); /* slight offset from cursor */
+        background-color: coral;
+        padding: 4px;
+        user-select: none;
+      }
+
+      #popup-guess > div {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #222;
+        color: #fff;
+        font-size: 14px;
+        border-radius: 4px;
+      }
+
+      #popup-guess > div:hover {
+        background: #fff;
+        color: #222;
+      }
     </style>
+    <script src="js/model.js"></script>
+    <script src="js/sounds.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/code.js"></script>
   </head>
   <body>
+    <div id="rip">
+      <div id="riptitle">RIP</div>
+      <button id="redo-button">Try again</button>
+    </div>
     <div id="parent-div">
       <div id="tile-grid"></div>
       <div>
-        <button id="redo-button">Restart!</button>
-        <button id="showall-button">Show all</button>
+        <button id="redo-button">DEBUG Start over!</button>
+        <button id="showall-button">DEBUG Show all</button>
       </div>
       <div id="stats">JORGE POWER</div>
       <button id="level-up">Level up!</button>
     </div>
     <div id="sprites"></div>
+    <div id="popup-guess">
+      <div>1</div>
+      <div>2</div>
+      <div>3</div>
+      <div>4</div>
+      <div>5</div>
+      <div>6</div>
+      <div>7</div>
+      <div>8</div>
+      <div>9</div>
+      <div>10</div>
+      <div>11</div>
+      <div>12</div>
+      <div>100</div>
+      <div>?</div>
+      <div>A</div>
+      <div>-</div>
+    </div>
   </body>
 </html>

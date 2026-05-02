@@ -24,13 +24,13 @@ const stamp = (ctx, img, x, y) => {
 };
 
 const tileIndexToXY = (index) => {
-  const x = index % numCols;
-  const y = Math.floor(index / numCols);
+  const x = index % NUM_COLS;
+  const y = Math.floor(index / NUM_COLS);
   return [x, y];
 };
 
 const xyToTileIndex = (x, y) => {
-  return numCols * y + x;
+  return NUM_COLS * y + x;
 };
 
 const iterateAround = (index, size, f) => {
@@ -40,7 +40,7 @@ const iterateAround = (index, size, f) => {
       if (size === 2 && Math.abs(dx) + Math.abs(dy) > size) {
         continue;
       }
-      if (x + dx >= 0 && x + dx < numCols && y + dy >= 0 && y + dy < numRows) {
+      if (x + dx >= 0 && x + dx < NUM_COLS && y + dy >= 0 && y + dy < NUM_ROWS) {
         f(x + dx, y + dy);
       }
     }
@@ -58,4 +58,16 @@ const goldMax = () => {
     return 25;
   }
   return table[i];
+};
+
+// TODO: this is bad. Improve it.
+const findEmptySpace = () => {
+  let count = 100;
+  while (count--) {
+    const index = Math.floor(Math.random() * TILE_COUNT);
+    if (data[index].key === KEY_EMPTY) {
+      return index;
+    }
+  }
+  throw new Error("Something went wrong");
 };
