@@ -1,36 +1,60 @@
-"use strict";
-
 // key, name, count, power, display
 
 // Cute gaming assets come from:
 // https://deepdivegamestudio.itch.io/ (Free even for commercial use)
 // https://greatdocbrown.itch.io/coins-gems-etc (CC0)
 
-// TODO: sounds
+// select.mp3, ping.mp3: recorded by ank
+
 // TODO: finish implementing annotations
 // TODO: implement "?"
 
-let sounds = undefined;
-async function loadAll() {
-  const loadedSounds = await loadSounds();
-  sounds = { ...loadedSounds };
-}
-loadAll();
+import {
+  DEFAULT_STATS,
+  makeModel,
+  setModelInstance,
+  resetStats,
+  data,
+  tileTypeByKey,
+  GUESS_NONE,
+  STATE_COVERED,
+  STATE_REVEALED_ITEM,
+  STATE_REVEALED_EMPTY,
+  STATE_REVEALED_GOLD,
+  E_CLICK_COVERED_REVEALED_EMPTY,
+  E_CLICK_COVERED_REVEALED_SPECIAL,
+  E_CLICK_COVERED_REVEALED_KILL_GOLD,
+  E_CLICK_COVERED_REVEALED_KILL_DIED,
+  E_CLICK_PICKED_UP_GOLD,
+  E_CLICK_PICKED_UP_HEART,
+  E_CLICK_START_SPHERE,
+  E_CLICK_PICKED_UP_SPECIAL,
+  E_CLICK_ENEMY_KILL_GOLD,
+  E_CLICK_ENEMY_KILL_DIED,
+  stats,
+  MAX_HEALTH_EVER,
+  tileMap,
+} from "./model.js";
 
-let stats = { ...DEFAULT_STATS };
+import { healthMax, goldMax, SPRITE_WIDTH, SPRITE_HEIGHT, stamp, getId, lock, unlock, isLocked } from "./utils.js";
+
+import { playMultipleSounds, playSound } from "./sounds.js";
+import { loadAllAssets } from "./loader.js";
+
 const model = makeModel();
+setModelInstance(model);
 
-const die = () => {
+const die = async () => {
+  lock();
   const ripDiv = document.getElementById("rip");
   ripDiv.style.visibility = "visible";
 
-  const sound = sounds.boom.cloneNode();
-  sound.onended = () => {
-    sounds.sadTrombone.play();
-  };
-  sound.play();
   document.body.classList.add("shake");
   document.getElementById("parent-div").classList.add("flash");
+
+  await playSound(sounds.boom);
+  await playSound(sounds.sadTrombone);
+  unlock();
 
   // TODO: reveal all
   setTimeout(() => {
@@ -39,361 +63,339 @@ const die = () => {
   }, 2000);
 };
 
-document.addEventListener("DOMContentLoaded", () => {
-  const gridContainer = document.getElementById("tile-grid");
+const reset = () => {
+  model.reset();
 
-  const reset = () => {
-    model.reset();
+  const ripDiv = document.getElementById("rip");
+  ripDiv.style.visibility = "hidden";
 
-    const ripDiv = document.getElementById("rip");
-    ripDiv.style.visibility = "hidden";
+  resetStats();
+};
 
-    const gridContainer = document.getElementById("tile-grid");
-    gridContainer.innerHTML = "";
-    stats = { ...DEFAULT_STATS };
-  };
+let installed = false; // TODO: move logic to happen only once.
+const lastMousePosition = { clientX: 0, clientY: 0 };
+let lastRightClickedIndex = 0;
+const rightClick = (tile, index) => {
+  lastRightClickedIndex = index;
+  const popup = document.getElementById("popup-guess");
 
-  let installed = false; // TODO: move logic to happen only once.
-  const lastMousePosition = { clientX: 0, clientY: 0 };
-  let lastRightClickedIndex = 0;
-  const rightClick = (tile, index) => {
-    lastRightClickedIndex = index;
-    const popup = document.getElementById("popup-guess");
+  if (!installed) {
+    installed = true;
+    document.addEventListener("mousemove", (e) => {
+      if (popup.style.visibility === "hidden") {
+        return;
+      }
+      lastMousePosition.clientX = e.clientX;
+      lastMousePosition.clientY = e.clientY;
+    });
+    popup.addEventListener("click", (e) => {
+      const index = lastRightClickedIndex;
+      const cell = e.target.closest("#popup-guess > div");
+      if (!cell) return;
 
-    if (!installed) {
-      installed = true;
-      document.addEventListener("mousemove", (e) => {
-        if (popup.style.visibility === "hidden") {
-          return;
-        }
-        lastMousePosition.clientX = e.clientX;
-        lastMousePosition.clientY = e.clientY;
-      });
-      popup.addEventListener("click", (e) => {
-        const index = lastRightClickedIndex;
-        const cell = e.target.closest("#popup-guess > div");
-        if (!cell) return;
-
-        const value = cell.textContent;
-        model.setGuess(index, value);
-        const gridContainer = document.getElementById("tile-grid");
-        const tile = gridContainer.children[index];
-        redrawTile(tile, index);
-        popup.style.visibility = "hidden";
-      });
-    }
-
-    popup.style.left = lastMousePosition.clientX + "px";
-    popup.style.top = lastMousePosition.clientY + "px";
-    if (popup.style.visibility !== "visible") {
-      popup.style.visibility = "visible";
-    } else {
+      const value = cell.textContent;
+      model.setGuess(index, value);
+      const gridContainer = document.getElementById("tile-grid");
+      const tile = gridContainer.children[index];
+      redrawTile(tile, index);
       popup.style.visibility = "hidden";
-    }
-  };
-
-  const click = (tile, index) => {
-    const [e, param] = model.click(data, index);
-    if (e === E_CLICK_COVERED_REVEALED_EMPTY) {
-      redrawTile(tile, index);
-    } else if (e === E_CLICK_COVERED_REVEALED_SPECIAL) {
-      // TODO: animate the special result
-      redrawTile(tile, index);
-    } else if (e === E_CLICK_COVERED_REVEALED_KILL_GOLD) {
-      const gridContainer = document.getElementById("tile-grid");
-      iterateAround(index, 1, (x, y) => {
-        const index = xyToTileIndex(x, y);
-        const tile = gridContainer.children[index];
-        redrawTile(tile, index);
-      });
-      redrawStats();
-    } else if (e === E_CLICK_COVERED_REVEALED_KILL_DIED) {
-      for (let i = 0; i < TILE_COUNT; i++) {
-        const tile = gridContainer.children[i];
-        redrawTile(tile, i);
-      }
-      redrawStats();
-      die();
-    } else if (e === E_CLICK_PICKED_UP_GOLD) {
-      const coinCount = param;
-      playMultipleSounds(sounds.coin, coinCount);
-      const gridContainer = document.getElementById("tile-grid");
-      iterateAround(index, 1, (x, y) => {
-        const index = xyToTileIndex(x, y);
-        const tile = gridContainer.children[index];
-        redrawTile(tile, index);
-      });
-      redrawStats();
-    } else if (e === E_CLICK_PICKED_UP_HEART) {
-      redrawTile(tile, index);
-      redrawStats();
-      // TODO: add a cool sound
-    } else if (e === E_CLICK_START_SPHERE) {
-      const gridContainer = document.getElementById("tile-grid");
-      iterateAround(index, 2, (x, y) => {
-        const i = xyToTileIndex(x, y);
-        const tile = gridContainer.children[i];
-        redrawTile(tile, i);
-      });
-
-      redrawStats();
-    } else if (e === E_CLICK_PICKED_UP_SPECIAL) {
-      // TODO: user revealed something special but hasn't used it yet.
-      redrawTile(tile, index);
-      redrawStats();
-    } else if (e === E_CLICK_ENEMY_KILL_GOLD) {
-      sounds.fight.play();
-
-      const gridContainer = document.getElementById("tile-grid");
-      iterateAround(index, 1, (x, y) => {
-        const index = xyToTileIndex(x, y);
-        const tile = gridContainer.children[index];
-        redrawTile(tile, index);
-      });
-      redrawStats();
-    } else if (e === E_CLICK_ENEMY_KILL_DIED) {
-      for (let i = 0; i < TILE_COUNT; i++) {
-        const tile = gridContainer.children[i];
-        redrawTile(tile, i);
-      }
-      redrawStats();
-      die();
-    }
-  };
-
-  function format(s1, s2) {
-    let s = s1.concat(s2);
-    let result = "";
-    for (let i = 0; i < s.length; i++) {
-      if (i === 5 || (i > 5 && i % 5 === 0)) {
-        result += " ";
-      }
-      result += s[i];
-    }
-    return result;
+    });
   }
 
-  const repeat = (s, count) => {
-    if (count <= 0) {
-      return [];
+  popup.style.left = `${lastMousePosition.clientX}px`;
+  popup.style.top = `${lastMousePosition.clientY}px`;
+  if (popup.style.visibility !== "visible") {
+    popup.style.visibility = "visible";
+  } else {
+    popup.style.visibility = "hidden";
+  }
+};
+
+const click = (tile, index) => {
+  const [e, param] = model.click(data, index);
+  const gridContainer = document.getElementById("tile-grid");
+  if (e === E_CLICK_COVERED_REVEALED_EMPTY) {
+    redrawTile(tile, index);
+  } else if (e === E_CLICK_COVERED_REVEALED_SPECIAL) {
+    // TODO: animate the special result
+    redrawTile(tile, index);
+  } else if (e === E_CLICK_COVERED_REVEALED_KILL_GOLD) {
+    tileMap.iterateAround(index, 1, (x, y) => {
+      const idx = tileMap.xyToTileIndex(x, y);
+      const tile = gridContainer.children[idx];
+      redrawTile(tile, idx);
+    });
+    redrawStats();
+  } else if (e === E_CLICK_COVERED_REVEALED_KILL_DIED) {
+    for (let i = 0; i < tileMap.count; i++) {
+      const tile = gridContainer.children[i];
+      redrawTile(tile, i);
     }
-    return new Array(count).fill(s);
-  };
+    redrawStats();
+    die();
+  } else if (e === E_CLICK_PICKED_UP_GOLD) {
+    const coinCount = param;
+    playMultipleSounds(sounds.coin, coinCount);
+    tileMap.iterateAround(index, 1, (x, y) => {
+      const idx = tileMap.xyToTileIndex(x, y);
+      const tile = gridContainer.children[idx];
+      redrawTile(tile, idx);
+    });
+    redrawStats();
+  } else if (e === E_CLICK_PICKED_UP_HEART) {
+    redrawTile(tile, index);
+    redrawStats();
+    // TODO: add a cool sound
+  } else if (e === E_CLICK_START_SPHERE) {
+    sounds.reveal.play();
+    tileMap.iterateAround(index, 2, (x, y) => {
+      const i = tileMap.xyToTileIndex(x, y);
+      const tile = gridContainer.children[i];
+      redrawTile(tile, i);
+    });
 
-  const redrawStats = () => {
-    const healthForDisplay = Math.max(stats.health, 0);
-    const statsDiv = document.getElementById("stats");
-    statsDiv.innerHTML = "";
-    // TODO: replace heart with image
-    const healthIcon = format(repeat("❤️", healthForDisplay), repeat("🩶", healthMax() - healthForDisplay));
-    const goldIcon = format(
-      // TODO: clean this up
-      repeat('<img class="animatedImage paused" data-anim="coin" width="16px" height="16px" />', stats.gold),
-      repeat("⚫", Math.max(0, goldMax() - stats.gold)),
-    );
-    statsDiv.innerHTML = `Pepe ${healthIcon} ${healthForDisplay}/${healthMax()} ${goldIcon} ${stats.gold}/${goldMax()} LVL ${stats.level + 1}`;
-    document.getElementById("level-up").hidden = !model.canLevelUp();
-  };
-
-  const redrawTile = (tile, index) => {
-    const tData = data[index];
-
-    const state = tData.state;
-    if (state === STATE_COVERED) {
-      updateTileView(tile, state);
-      if (tData.guess === GUESS_NONE) {
-        updateTileView(tile, state, "");
-      } else {
-        updateTileView(tile, state, tData.guess);
-      }
-    } else if (state === STATE_REVEALED_EMPTY) {
-      let power = model.calcPowerForTile(index);
-      if (power === 0) {
-        power = "";
-      }
-      updateTileView(tile, state, power);
-    } else if (state === STATE_REVEALED_ITEM) {
-      let power = tileTypeByKey[tData.key].power;
-      let anim = tileTypeByKey[tData.key].anim;
-      if (power === 0) {
-        power = "";
-      }
-      updateTileView(tile, state, tileTypeByKey[tData.key].display, power, anim);
-    } else if (state === STATE_REVEALED_GOLD) {
-      let power = tileTypeByKey[tData.key].power;
-      let anim = tileTypeByKey[tData.key].anim;
-      if (power === 0) {
-        power = "";
-      }
-      updateTileView(tile, state, tileTypeByKey[tData.key].display, power, anim);
+    redrawStats();
+  } else if (e === E_CLICK_PICKED_UP_SPECIAL) {
+    // TODO: user revealed something special but hasn't used it yet.
+    redrawTile(tile, index);
+    redrawStats();
+  } else if (e === E_CLICK_ENEMY_KILL_GOLD) {
+    sounds.fight.play();
+    tileMap.iterateAround(index, 1, (x, y) => {
+      const idx = tileMap.xyToTileIndex(x, y);
+      const tile = gridContainer.children[idx];
+      redrawTile(tile, idx);
+    });
+    redrawStats();
+  } else if (e === E_CLICK_ENEMY_KILL_DIED) {
+    for (let i = 0; i < tileMap.count; i++) {
+      const tile = gridContainer.children[i];
+      redrawTile(tile, i);
     }
-  };
+    redrawStats();
+    die();
+  }
+};
 
-  const updateTileView = (tile, state, content, secondLine, anim) => {
-    tile.innerHTML = "";
-    tile.classList.remove("covered");
-    tile.classList.remove("empty");
+const makeStatIcon = (anim, extraClass) => {
+  const img = document.createElement("img");
+  img.className = `animatedImage paused${extraClass ? " " + extraClass : ""}`;
+  img.dataset.anim = anim;
+  img.width = 16;
+  img.height = 16;
+  img.src = frames[anim]?.[0] ?? "";
+  return img;
+};
 
-    if (state === STATE_COVERED) {
-      tile.classList.add("covered");
-      if (content !== undefined && content !== "" && content !== GUESS_NONE) {
-        const span = document.createElement("span");
-        span.innerText = content;
-        tile.appendChild(span);
-      }
-    } else if (state === STATE_REVEALED_EMPTY) {
-      tile.classList.add("empty");
+const appendIcons = (parent, anim, count, extraClass) => {
+  for (let i = 0; i < count; i++) {
+    if (i > 0 && i % 5 === 0) {
+      parent.appendChild(document.createTextNode(" "));
+    }
+    parent.appendChild(makeStatIcon(anim, extraClass));
+  }
+};
+
+const redrawStats = () => {
+  const healthForDisplay = Math.max(stats.health, 0);
+  const statsDiv = document.getElementById("stats");
+  const fragment = document.createDocumentFragment();
+
+  const maxHealth = healthMax(stats, MAX_HEALTH_EVER);
+  appendIcons(fragment, "heart", healthForDisplay);
+  appendIcons(fragment, "heart", maxHealth - healthForDisplay, "dead");
+  fragment.appendChild(document.createTextNode(` ${healthForDisplay}/${maxHealth}`));
+
+  fragment.appendChild(document.createTextNode(" "));
+
+  const goldTotal = goldMax(stats);
+  appendIcons(fragment, "coin", stats.gold);
+  appendIcons(fragment, "coin", goldTotal - stats.gold, "dead");
+  fragment.appendChild(document.createTextNode(` ${stats.gold}/${goldTotal}`));
+
+  fragment.appendChild(document.createTextNode(` LVL ${stats.level + 1}`));
+  fragment.appendChild(document.createTextNode(` TOT ${model.totals().total}`));
+
+  statsDiv.replaceChildren(fragment);
+  document.getElementById("level-up").hidden = !model.canLevelUp();
+};
+
+const redrawTile = (tile, index) => {
+  const tData = data[index];
+
+  const { state } = tData;
+  if (state === STATE_COVERED) {
+    updateTileView(tile, state);
+    if (tData.guess === GUESS_NONE) {
+      updateTileView(tile, state, "");
+    } else {
+      updateTileView(tile, state, tData.guess);
+    }
+  } else if (state === STATE_REVEALED_EMPTY) {
+    let power = model.calcPowerForTile(index);
+    if (power === 0) {
+      power = "";
+    }
+    updateTileView(tile, state, power);
+  } else if (state === STATE_REVEALED_ITEM) {
+    let { power } = tileTypeByKey[tData.key];
+    const { anim } = tileTypeByKey[tData.key];
+    if (power === 0) {
+      power = "";
+    }
+    updateTileView(tile, state, tileTypeByKey[tData.key].display, power, anim);
+  } else if (state === STATE_REVEALED_GOLD) {
+    let { power } = tileTypeByKey[tData.key];
+    const { anim } = tileTypeByKey[tData.key];
+    if (power === 0) {
+      power = "";
+    }
+    updateTileView(tile, state, tileTypeByKey[tData.key].display, power, anim);
+  }
+};
+
+const updateTileView = (tile, state, content, secondLine, anim) => {
+  tile.innerHTML = "";
+  tile.classList.remove("covered");
+  tile.classList.remove("empty");
+
+  if (state === STATE_COVERED) {
+    tile.classList.add("covered");
+    if (content !== undefined && content !== "" && content !== GUESS_NONE) {
       const span = document.createElement("span");
       span.innerText = content;
       tile.appendChild(span);
-    } else if (state === STATE_REVEALED_ITEM) {
-      const newAnimation = makeImg();
-      newAnimation.classList.add("animatedImage");
-      if (anim) {
-        newAnimation.dataset.anim = anim;
-      }
-      const animationDiv = document.createElement("div");
-      animationDiv.appendChild(newAnimation);
-      tile.appendChild(animationDiv);
-      if (secondLine === "" || typeof secondLine === "undefined") {
-        newAnimation.classList.add("itemOnly");
-      }
-      const span = document.createElement("span");
-      span.innerText = secondLine;
-      tile.appendChild(span);
-    } else if (state === STATE_REVEALED_GOLD) {
-      const newAnimation = makeImg();
-      newAnimation.classList.add("animatedImage");
-      newAnimation.classList.add("paused");
-      newAnimation.classList.add("dead");
-      if (anim) {
-        newAnimation.dataset.anim = anim;
-      }
-      const animationDiv = document.createElement("div");
-      animationDiv.appendChild(newAnimation);
-      tile.appendChild(animationDiv);
-      const span = document.createElement("span");
-      span.innerText = secondLine;
-      tile.appendChild(span);
-      const coinImage = makeImg();
-      coinImage.style.width = SPRITE_WIDTH + "px";
-      coinImage.style.height = SPRITE_HEIGHT + "px";
-      coinImage.classList.add("animatedImage");
-      coinImage.classList.add("coin");
-      coinImage.dataset.anim = "coin";
-      const coinDiv = document.createElement("div");
-      coinDiv.appendChild(coinImage);
-      tile.appendChild(coinDiv);
     }
-  };
-
-  const makeTile = (index) => {
-    const tile = document.createElement("div");
-    tile.classList.add("tile");
-    tile.dataset.index = index;
-    tile.innerText = "";
-    tile.classList.add("covered");
-    return tile;
-  };
-
-  const createGrid = () => {
-    reset();
-    for (let i = 0; i < TILE_COUNT; i++) {
-      const tile = makeTile(i);
-      redrawTile(tile, i);
-
-      tile.addEventListener("click", (event) => {
-        const index = parseInt(event.currentTarget.dataset.index, 10);
-        click(event.currentTarget, index);
-      });
-
-      tile.addEventListener("contextmenu", (event) => {
-        const index = parseInt(event.currentTarget.dataset.index, 10);
-        event.preventDefault();
-        lastMousePosition.clientX = event.clientX;
-        lastMousePosition.clientY = event.clientY;
-        rightClick(event.currentTarget, index);
-      });
-
-      tile.addEventListener("mouseover", (obj) => {
-        const index = parseInt(obj.target.dataset.index, 10);
-        if (isNaN(index)) {
-          return;
-        }
-        const { key } = data[index];
-        // DEBUG
-        // console.table(data[index], tileTypeByKey[key]);
-      });
-
-      gridContainer.appendChild(tile);
+  } else if (state === STATE_REVEALED_EMPTY) {
+    tile.classList.add("empty");
+    const span = document.createElement("span");
+    span.innerText = content;
+    tile.appendChild(span);
+  } else if (state === STATE_REVEALED_ITEM) {
+    const newAnimation = makeImg();
+    newAnimation.classList.add("animatedImage");
+    if (anim) {
+      newAnimation.dataset.anim = anim;
     }
-    redrawStats();
-  };
+    const animationDiv = document.createElement("div");
+    animationDiv.appendChild(newAnimation);
+    tile.appendChild(animationDiv);
+    if (secondLine === "" || typeof secondLine === "undefined") {
+      newAnimation.classList.add("itemOnly");
+    }
+    const span = document.createElement("span");
+    span.innerText = secondLine;
+    tile.appendChild(span);
+  } else if (state === STATE_REVEALED_GOLD) {
+    const newAnimation = makeImg();
+    newAnimation.classList.add("animatedImage");
+    newAnimation.classList.add("paused");
+    newAnimation.classList.add("dead");
+    if (anim) {
+      newAnimation.dataset.anim = anim;
+    }
+    const animationDiv = document.createElement("div");
+    animationDiv.appendChild(newAnimation);
+    tile.appendChild(animationDiv);
+    const span = document.createElement("span");
+    span.innerText = secondLine;
+    tile.appendChild(span);
+    const coinImage = makeImg();
+    coinImage.style.width = `${SPRITE_WIDTH}px`;
+    coinImage.style.height = `${SPRITE_HEIGHT}px`;
+    coinImage.classList.add("animatedImage");
+    coinImage.classList.add("coin");
+    coinImage.dataset.anim = "coin";
+    const coinDiv = document.createElement("div");
+    coinDiv.appendChild(coinImage);
+    tile.appendChild(coinDiv);
+  }
+};
+
+const makeTile = (index) => {
+  const tile = document.createElement("div");
+  tile.classList.add("tile");
+  tile.dataset.index = index;
+  tile.innerText = "";
+  tile.classList.add("covered");
+  return tile;
+};
+
+const createGrid = () => {
+  reset();
+  const gridContainer = document.getElementById("tile-grid");
+  gridContainer.innerHTML = "";
+  for (let i = 0; i < tileMap.count; i++) {
+    const tile = makeTile(i);
+    redrawTile(tile, i);
+
+    tile.addEventListener("click", (event) => {
+      const index = parseInt(event.currentTarget.dataset.index, 10);
+      click(event.currentTarget, index);
+    });
+
+    tile.addEventListener("contextmenu", (event) => {
+      const index = parseInt(event.currentTarget.dataset.index, 10);
+      event.preventDefault();
+      lastMousePosition.clientX = event.clientX;
+      lastMousePosition.clientY = event.clientY;
+      rightClick(event.currentTarget, index);
+    });
+
+    tile.addEventListener("mouseover", (obj) => {
+      const index = parseInt(obj.target.dataset.index, 10);
+      if (isNaN(index)) {
+        return;
+      }
+      const { key } = data[index];
+      // DEBUG
+      // console.table(data[index], tileTypeByKey[key]);
+    });
+
+    gridContainer.appendChild(tile);
+  }
+  redrawStats();
+};
+
+let sounds = {};
+let images = {};
+const frames = {};
+
+document.addEventListener("DOMContentLoaded", async () => {
+  console.log("Loading assets...");
+  const assets = await loadAllAssets();
+  sounds = assets.sounds;
+  images = assets.images;
+  console.log("Loaded assets", assets);
+  imagesFinishedLoading(images);
+  document.getElementById("loading").style.visibility = "hidden";
 
   document.getElementById("level-up").addEventListener("click", () => {
-    stats.gold -= goldMax();
+    stats.gold -= goldMax(stats);
     stats.level++;
-    stats.health = healthMax();
+    stats.health = healthMax(stats, MAX_HEALTH_EVER);
     redrawStats();
+    sounds.ping.play();
   });
 
   document.getElementById("redo-button").addEventListener("click", () => {
+    if (isLocked()) return;
     createGrid();
   });
   document.getElementById("showall-button").addEventListener("click", () => {
     model.revealAll();
-    for (let i = 0; i < TILE_COUNT; i++) {
+    const gridContainer = document.getElementById("tile-grid");
+    for (let i = 0; i < tileMap.count; i++) {
       const tile = gridContainer.children[i];
       redrawTile(tile, i);
     }
   });
   createGrid();
-
-  getSprites();
 });
-
-// Images and sprites
-
-// TODO: single loading of sprites and sounds
-const getSprites = () => {
-  Promise.all(spriteUrls.map(loadImage))
-    .then((images) => {
-      loadedImages = images;
-      console.log("Loaded!");
-      imagesFinishedLoading();
-    })
-    // TODO: proper error management
-    .catch((err) => console.error(err));
-};
-
-const SPRITE_WIDTH = 16;
-const SPRITE_HEIGHT = 16;
-let spriteUrls = ["coin"];
-for (let i = 0; i < tileTypes.length; i++) {
-  const [key, name, count, power, display, anim] = tileTypes[i];
-  if (anim) {
-    spriteUrls.push(anim);
-  }
-}
-let loadedImages = [];
-
-const frames = {};
-
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.src = `img/${src}.png`;
-
-    img.dataset.anim = src;
-
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-  });
-}
 
 const makeImg = (id) => {
   if (typeof id === "undefined") {
-    id = "animage" + getId();
+    id = `animage${getId()}`;
   }
   const img = document.createElement("img");
   img.id = id;
@@ -405,8 +407,8 @@ const makeImg = (id) => {
   return img;
 };
 
-const imagesFinishedLoading = () => {
-  loadedImages.forEach((image) => {
+const imagesFinishedLoading = (images) => {
+  images.forEach((image) => {
     const cols = Math.floor(image.width / SPRITE_WIDTH);
     const rows = Math.floor(image.height / SPRITE_HEIGHT);
 
@@ -447,7 +449,7 @@ function animate(time) {
     const elements = document.getElementsByClassName("animatedImage");
     for (let i = 0; i < elements.length; i++) {
       const elem = elements[i];
-      const anim = elem.dataset.anim;
+      const { anim } = elem.dataset;
       if (!anim) {
         continue;
       }
